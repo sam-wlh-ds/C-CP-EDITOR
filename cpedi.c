@@ -21,7 +21,7 @@
 /* Defines */
 
 #define CPEDI_VERSION "0.0.1"
-#define CPEDI_TAB_STOP 8
+#define CPEDI_TAB_STOP 4
 #define CPEDI_QUIT_TIMES 3
 #define CPEDI_READ_WAIT_TIME 1000
 
@@ -364,10 +364,17 @@ void editorInsertChar(int c){
 }
 
 void editorInsertNewLine(){
+    erow *row = &E.row[E.cy];
+    int tabs = 0, j = 0;
+    while (row->chars[j] != '\0' && row->chars[j] == '\t')
+    {
+        tabs++;
+        j++;
+    }
+
     if ((E.cx-countDigits(E.numrows)) == 0){
         editorInsertRow(E.cy, "", 0);
     } else {
-        erow *row = &E.row[E.cy];
         editorInsertRow(E.cy+1, &row->chars[(E.cx-countDigits(E.numrows))], row->size-(E.cx-countDigits(E.numrows)));
         row = &E.row[E.cy];
         row->size = (E.cx-countDigits(E.numrows));
@@ -376,6 +383,7 @@ void editorInsertNewLine(){
     }
     E.cy++;
     E.cx = countDigits(E.numrows);
+    while(tabs--) editorInsertChar('\t');
 }
 
 void editorDelChar(){
@@ -437,8 +445,8 @@ void editorOpen(char *filename){
     E.dirty = 0;
 }
 
-void editorSave(){
-    if (E.filename == NULL) {
+void editorSave(int newFile){
+    if (E.filename == NULL || newFile) {
         E.filename = editorPrompt("Save as: %s (ESC to cancel)");
         if (E.filename == NULL){
             editorSetStatusMessage("Save aborted");
@@ -745,7 +753,11 @@ void editorProcessKeypress(){
             break;
 
         case CTRL_KEY('s'):
-            editorSave();
+            editorSave(0);
+            break;
+        
+        case CTRL_KEY('w'):
+            editorSave(1);
             break;
             
         case ARROW_UP:
@@ -793,6 +805,21 @@ void editorProcessKeypress(){
         case CTRL_KEY('l'):
         case '\x1b':
             break;
+
+        case '(':
+            editorInsertChar(c);
+            editorInsertChar(')');
+            E.cx--;
+            break;
+        
+        case '{':
+            editorInsertChar(c);
+            editorInsertChar('}');
+            E.cx--;
+            editorInsertNewLine();editorInsertNewLine();
+            E.cy--; editorInsertChar('\t');
+            break;
+            
         
         default:
             editorInsertChar(c);
@@ -800,7 +827,7 @@ void editorProcessKeypress(){
     }
 
     quit_times = CPEDI_QUIT_TIMES;
-    
+
 }
 
 /* Init */
@@ -832,7 +859,7 @@ int main(int argc, char* argv[]){
         editorOpen(argv[1]);
     }
 
-    editorSetStatusMessage("COMMANDS: Ctrl-Q = quit | Ctrl-S = save");
+    editorSetStatusMessage("COMMANDS: Ctrl-Q = quit | Ctrl-S = save | Ctrl-W = Save As");
 
     while (1)
     {
