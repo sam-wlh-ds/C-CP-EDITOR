@@ -800,6 +800,7 @@ void editorProcessKeypress(){
     }
 
     quit_times = CPEDI_QUIT_TIMES;
+    
 }
 
 /* Init */
