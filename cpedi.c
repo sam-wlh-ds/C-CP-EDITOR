@@ -347,6 +347,11 @@ void editorRowAppendString(erow *row, char *s, size_t len){
 void editorRowDelChar(erow *row, int at){
     if (at < 0 || at >= row->size) return;
     // Null byte gets included in memmove
+    if ((row->chars[at] == '(' && at+1<row->size && row->chars[at+1] == ')')
+        || (row->chars[at] == '{' && at+1<row->size && row->chars[at+1] == '}')
+        || (row->chars[at] == '[' && at+1<row->size && row->chars[at+1] == ']')){
+        editorRowDelChar(row, at+1);
+    } 
     memmove(&row->chars[at], &row->chars[at+1], row->size-at);
     row->size--;
     editorUpdateRow(row);
@@ -399,6 +404,15 @@ void editorDelChar(){
         editorRowAppendString(&E.row[E.cy-1], row->chars, row->size);
         editorDelRow(E.cy);
         E.cy--;
+    }
+}
+
+void editorTeleport(){
+    char *line = editorPrompt("Line Number : %s");
+    int l = atoi(line);
+    if (l < E.numrows){
+        E.cy = l-1;
+        E.cx = countDigits(E.numrows)+getRowLength();
     }
 }
 
@@ -759,6 +773,10 @@ void editorProcessKeypress(){
         case CTRL_KEY('w'):
             editorSave(1);
             break;
+        
+        case CTRL_KEY('d'):
+            editorTeleport();
+            break;
             
         case ARROW_UP:
         case ARROW_LEFT:
@@ -805,10 +823,11 @@ void editorProcessKeypress(){
         case CTRL_KEY('l'):
         case '\x1b':
             break;
-
+        
+        case '[':
         case '(':
             editorInsertChar(c);
-            editorInsertChar(')');
+            c=='('? editorInsertChar(')'): editorInsertChar(']');
             E.cx--;
             break;
         
@@ -859,7 +878,7 @@ int main(int argc, char* argv[]){
         editorOpen(argv[1]);
     }
 
-    editorSetStatusMessage("COMMANDS: Ctrl-Q = quit | Ctrl-S = save | Ctrl-W = Save As");
+    editorSetStatusMessage("COMMANDS: Ctrl-Q = quit | Ctrl-S = save | Ctrl-W = Save As | Ctrl-D: Teleport");
 
     while (1)
     {
