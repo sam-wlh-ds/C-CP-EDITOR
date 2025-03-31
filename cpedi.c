@@ -86,6 +86,13 @@ int imax(int a, int b){
     return a;
 }
 
+int countDigits(int a){
+    static int maxDigit = 0;
+    int digits = floor( log10( (double)a ) ) + 1;
+    maxDigit = imax(maxDigit, digits);
+    return maxDigit;
+}
+
 /* Basic */
 int getRowLength(){
     erow *row = (E.cy >= E.numrows) ? NULL: &E.row[E.cy];
@@ -352,35 +359,35 @@ void editorInsertChar(int c){
     if (E.cy == E.numrows){
         editorInsertRow(E.numrows, "", 0);
     }
-    editorRowInsertChar(&E.row[E.cy], E.cx, c);
+    editorRowInsertChar(&E.row[E.cy], (E.cx-countDigits(E.numrows)), c);
     E.cx++;
 }
 
 void editorInsertNewLine(){
-    if (E.cx == 0){
+    if ((E.cx-countDigits(E.numrows)) == 0){
         editorInsertRow(E.cy, "", 0);
     } else {
         erow *row = &E.row[E.cy];
-        editorInsertRow(E.cy+1, &row->chars[E.cx], row->size-E.cx);
+        editorInsertRow(E.cy+1, &row->chars[(E.cx-countDigits(E.numrows))], row->size-(E.cx-countDigits(E.numrows)));
         row = &E.row[E.cy];
-        row->size = E.cx;
+        row->size = (E.cx-countDigits(E.numrows));
         row->chars[row->size] = '\0';
         editorUpdateRow(row);
     }
     E.cy++;
-    E.cx = 0;
+    E.cx = countDigits(E.numrows);
 }
 
 void editorDelChar(){
     if (E.cy == E.numrows) return;
-    if (E.cx == 0 && E.cy == 0) return;
+    if ((E.cx-countDigits(E.numrows)) == 0 && E.cy == 0) return;
 
     erow *row = &E.row[E.cy];
-    if (E.cx > 0){
-        editorRowDelChar(row, E.cx - 1);
+    if ((E.cx-countDigits(E.numrows)) > 0){
+        editorRowDelChar(row, (E.cx-countDigits(E.numrows)) - 1);
         E.cx--;
     } else {
-        E.cx = E.row[E.cy-1].size;
+        E.cx = countDigits(E.numrows) + E.row[E.cy-1].size;
         editorRowAppendString(&E.row[E.cy-1], row->chars, row->size);
         editorDelRow(E.cy);
         E.cy--;
@@ -490,9 +497,9 @@ void abFree(struct abuf *ab){
 /* Output */
 
 void editorScroll(){
-    E.rx = 0;
+    E.rx = countDigits(E.numrows);
     if (E.cy < E.numrows){
-        E.rx = editorRowCxtoRx(&E.row[E.cy], E.cx);
+        E.rx = countDigits(E.numrows) + editorRowCxtoRx(&E.row[E.cy], (E.cx-countDigits(E.numrows)));
     }
 
     if (E.cy < E.rowoff){
@@ -502,12 +509,27 @@ void editorScroll(){
         // As screenrows is 1 based indexing
         E.rowoff = E.cy - E.screenrows+1;
     }
-    if (E.rx < E.coloff){
-        E.coloff = E.rx;
+    if (E.rx-countDigits(E.numrows) < E.coloff){
+        E.coloff = E.rx-countDigits(E.numrows);
     } 
-    if (E.rx >= E.coloff + E.screencols){
-        E.coloff = E.rx - E.screencols+1;
+    if (E.rx-countDigits(E.numrows) >= E.coloff + E.screencols){
+        E.coloff = E.rx-countDigits(E.numrows) - E.screencols+1;
     }
+}
+
+void editorDrawLineNumber(struct abuf *ab, int line){
+    int dig = countDigits(E.numrows);
+    char num[dig+10];
+    int len = snprintf(num, sizeof(num), "\x1b[7m%d\x1b[m", line); // 4 + x + 3
+    while (len<dig+7)
+    {
+        // 0123456789(10)
+        memmove(&num[5], &num[4], len-4);
+        num[4] = ' ';
+        len++;
+    }
+    num[len] = '\0';
+    abAppend(ab, num, len);
 }
 
 void editorDrawRows(struct abuf *ab){
@@ -523,7 +545,7 @@ void editorDrawRows(struct abuf *ab){
                 welcomelen = imin(welcomelen, E.screencols);
                 int padding = (E.screencols-welcomelen)/2;
                 if (padding){
-                    abAppend(ab, "~", 1);
+                    editorDrawLineNumber(ab, y+1);
                     padding--;
                     while (padding--)
                     {
@@ -533,12 +555,14 @@ void editorDrawRows(struct abuf *ab){
                 abAppend(ab, welcome, welcomelen);
             }
             else{
-                abAppend(ab, "~", 1);
+                // abAppend(ab, "~", 1);
+                editorDrawLineNumber(ab, E.rowoff+y+1);
             }
         } else {
             int len = E.row[filerow].rsize - E.coloff;
             len = imax(0, len);
             len = imin(len, E.screencols);
+            editorDrawLineNumber(ab, E.rowoff+y+1);
             abAppend(ab, &E.row[filerow].render[E.coloff], len);
         }
 
@@ -555,7 +579,7 @@ void editorDrawStatusBar(struct abuf *ab){
         E.filename ? E.filename : "[No Name]", E.numrows, 
         E.dirty ? "(modified)":"");
     int rlen = snprintf(rstatus, sizeof(rstatus), "R: %d C: %d",
-        E.cy+1, E.rx+1);
+        E.cy+1, E.rx-countDigits(E.numrows)+1);
     len = imin(len, E.screencols);
     abAppend(ab, status, len);
     while (len < E.screencols)
@@ -673,17 +697,17 @@ void editorMoveCursor(int key){
     switch (key)
     {
     case ARROW_LEFT:
-        if (E.cx != 0) E.cx--;
+        if ((E.cx-countDigits(E.numrows)) != 0) E.cx--;
         else if (E.cy > 0){
             E.cy--;
-            E.cx = E.row[E.cy].size;
+            E.cx = countDigits(E.numrows) + E.row[E.cy].size;
         }
         break;
     case ARROW_RIGHT:
-        if (row && E.cx < row->size){
+        if (row && (E.cx-countDigits(E.numrows)) < row->size){
             E.cx++;
-        } else if (E.cy < E.numrows) {
-            E.cx = 0;
+        } else if (E.cy+1 < E.numrows) {
+            E.cx = countDigits(E.numrows);
             editorMoveCursor(ARROW_DOWN);
         }
         break;
@@ -695,7 +719,7 @@ void editorMoveCursor(int key){
         break;
     }
 
-    E.cx = imin(E.cx, getRowLength());
+    E.cx = countDigits(E.numrows) + imin((E.cx-countDigits(E.numrows)), getRowLength());
 }
 
 void editorProcessKeypress(){
@@ -749,16 +773,20 @@ void editorProcessKeypress(){
             }
         
         case HOME_KEY:
-            E.cx = 0;
+            E.cx = countDigits(E.numrows);
             break;
         case END_KEY:
-            E.cx = getRowLength();
+            E.cx = countDigits(E.numrows) + getRowLength();
             break;
 
         case BACKSPACE:
         case CTRL_KEY('h'):
         case DEL_KEY:
-            if (c == DEL_KEY) editorMoveCursor(ARROW_RIGHT);
+            if (c == DEL_KEY) {
+                int temp = E.cx;
+                editorMoveCursor(ARROW_RIGHT);
+                if (temp == E.cx) break;
+            }
             editorDelChar();
             break;
 
@@ -793,6 +821,7 @@ void initEditor(){
         die("initEditor: getWindowSize failed to get size of terminal");
     }
     E.screenrows -= 2; // Room for status bar at the bottom
+    E.cx = E.rx = countDigits(E.screenrows);
 }
 
 int main(int argc, char* argv[]){
