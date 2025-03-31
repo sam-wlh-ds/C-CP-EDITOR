@@ -22,7 +22,7 @@
 
 #define CPEDI_VERSION "0.0.1"
 #define CPEDI_TAB_STOP 4
-#define CPEDI_QUIT_TIMES 3
+#define CPEDI_QUIT_TIMES 2
 #define CPEDI_READ_WAIT_TIME 1000
 
 #define CTRL_KEY(k) ((k) & 0x1f) // sets the upper 3 bits of the character to 0
@@ -457,6 +457,13 @@ void editorOpen(char *filename){
     free(line);
     fclose(fp);
     E.dirty = 0;
+    if (strcmp(E.filename,"cp/template.cpp")==0){
+        E.cy = 45;
+        editorScroll();
+        E.cy = 30;
+        E.cx = countDigits(E.numrows);   
+        editorInsertChar('\t');
+    }
 }
 
 void editorSave(int newFile){
