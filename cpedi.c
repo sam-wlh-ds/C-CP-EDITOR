@@ -74,6 +74,7 @@ struct editorConfig E;
 void editorSetStatusMessage(const char *fmt, ...);
 void editorRefreshScreen();
 char *editorPrompt(char *prompt);
+char* editorRowsToString(int *buflen);
 
 /* Math */
 int imin(int a, int b){
@@ -349,7 +350,9 @@ void editorRowDelChar(erow *row, int at){
     // Null byte gets included in memmove
     if ((row->chars[at] == '(' && at+1<row->size && row->chars[at+1] == ')')
         || (row->chars[at] == '{' && at+1<row->size && row->chars[at+1] == '}')
-        || (row->chars[at] == '[' && at+1<row->size && row->chars[at+1] == ']')){
+        || (row->chars[at] == '[' && at+1<row->size && row->chars[at+1] == ']')
+        || (row->chars[at] == '\'' && at+1<row->size && row->chars[at+1] == '\'')
+        || (row->chars[at] == '"' && at+1<row->size && row->chars[at+1] == '"')){
         editorRowDelChar(row, at+1);
     } 
     memmove(&row->chars[at], &row->chars[at+1], row->size-at);
@@ -416,6 +419,19 @@ void editorTeleport(){
     }
 }
 
+void editorCopyToClipboard(const char *text, int len){
+    char command[len+100];
+    snprintf(command, sizeof(command), "echo '%s' | xclip -selection clipboard", text);
+    system(command);
+}
+
+void editorCopyAll(){
+    int len;
+    char *buf = editorRowsToString(&len);
+    buf[len] = '\0';
+    editorCopyToClipboard(buf, len);
+    editorSetStatusMessage("Copied to Clipboard Successfully: %d", len);
+}
 /* File i/o */
 
 char* editorRowsToString(int *buflen){
@@ -784,6 +800,10 @@ void editorProcessKeypress(){
         case CTRL_KEY('d'):
             editorTeleport();
             break;
+        
+        case CTRL_KEY('a'):
+            editorCopyAll();
+            break;
             
         case ARROW_UP:
         case ARROW_LEFT:
@@ -829,6 +849,13 @@ void editorProcessKeypress(){
 
         case CTRL_KEY('l'):
         case '\x1b':
+            break;
+
+        case '"':
+        case '\'':
+            editorInsertChar(c);
+            c=='"'? editorInsertChar('"'): editorInsertChar('\'');
+            E.cx--;
             break;
         
         case '[':
@@ -879,13 +906,14 @@ void initEditor(){
 }
 
 int main(int argc, char* argv[]){
+    system("clear");
     enableRawMode();
     initEditor();
     if (argc >= 2){
         editorOpen(argv[1]);
     }
 
-    editorSetStatusMessage("COMMANDS: Ctrl-Q = quit | Ctrl-S = save | Ctrl-W = Save As | Ctrl-D: Teleport");
+    editorSetStatusMessage("COMMANDS: ^Q = quit | ^S = save | ^W = Save As | ^D: Teleport | ^A: Copy All");
 
     while (1)
     {
