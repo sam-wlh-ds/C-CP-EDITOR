@@ -20,7 +20,7 @@
 
 /* Defines */
 
-#define CPEDI_VERSION "0.0.1"
+#define CPEDI_VERSION "0.0.2"
 #define CPEDI_TAB_STOP 4
 #define CPEDI_QUIT_TIMES 2
 #define CPEDI_READ_WAIT_TIME 1000
@@ -469,6 +469,14 @@ void editorCopyAll(){
     editorCopyToClipboard(buf, len);
     editorSetStatusMessage("Copied to Clipboard Successfully: %d", len);
 }
+
+void editorCopyRow(int at){
+    int len = E.row[at].size;
+    char *buf = malloc(len);
+    memcpy(buf, E.row[at].chars, len);
+    editorCopyToClipboard(buf, len);
+    editorSetStatusMessage("Row Copied to Clipboard: %d", len);
+}
 /* File i/o */
 
 char* editorRowsToString(int *buflen){
@@ -840,6 +848,14 @@ void editorProcessKeypress(){
         
         case CTRL_KEY('a'):
             editorCopyAll();
+            break;
+        
+        case CTRL_KEY('x'):
+            if (E.numrows > 0){
+                editorCopyRow(E.cy);
+                editorDelRow(E.cy);
+                E.cx = countDigits(E.numrows);
+            }
             break;
             
         case ARROW_UP:
