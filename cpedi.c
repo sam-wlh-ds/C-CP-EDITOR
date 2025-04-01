@@ -419,10 +419,47 @@ void editorTeleport(){
     }
 }
 
-void editorCopyToClipboard(const char *text, int len){
-    char command[len+100];
-    snprintf(command, sizeof(command), "echo '%s' | xclip -selection clipboard", text);
-    system(command);
+// This function is written by Claude AI as the earlier version of this function was not suitable for copying
+// characters involved in the code, not sure what sorcery it did here, something realted to xclip - linux
+void editorCopyToClipboard(const char *text, int len) {
+    // Create a pipe for communication with xclip
+    int pipefd[2];
+    if (pipe(pipefd) == -1) {
+        perror("pipe");
+        return;
+    }
+    
+    pid_t pid = fork();
+    if (pid == -1) {
+        perror("fork");
+        close(pipefd[0]);
+        close(pipefd[1]);
+        return;
+    }
+    
+    if (pid == 0) {  // Child process
+        close(pipefd[1]);  // Close write end
+        
+        // Redirect stdin to read from pipe
+        dup2(pipefd[0], STDIN_FILENO);
+        close(pipefd[0]);
+        
+        // Execute xclip
+        execlp("xclip", "xclip", "-selection", "clipboard", NULL);
+        
+        // If we get here, exec failed
+        perror("execlp");
+        exit(EXIT_FAILURE);
+    } else {  // Parent process
+        close(pipefd[0]);  // Close read end
+        
+        // Write the text to the pipe
+        write(pipefd[1], text, len);
+        close(pipefd[1]);
+        
+        // Wait for child to finish
+        waitpid(pid, NULL, 0);
+    }
 }
 
 void editorCopyAll(){
